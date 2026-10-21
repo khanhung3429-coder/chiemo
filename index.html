@@ -39,14 +39,13 @@ pre{margin:0;background:var(--code);color:var(--code-ink);border-radius:8px;padd
 
 <section id="auth" class="panel">
   <h1>Kho code</h1>
-  <p class="mute">Đăng nhập để lưu code và file của bạn.</p>
-  <input id="email" type="email" placeholder="Email" autocomplete="email">
+  <p class="mute">Nhập tên đăng nhập và mật khẩu để lưu code và file của bạn.</p>
+  <input id="email" type="text" placeholder="Tên đăng nhập" autocomplete="username" autocapitalize="none" spellcheck="false">
   <input id="pass" type="password" placeholder="Mật khẩu (từ 6 ký tự)" autocomplete="current-password">
   <div class="row">
     <button class="primary grow" id="btnLogin">Đăng nhập</button>
     <button class="grow" id="btnSignup">Tạo tài khoản</button>
   </div>
-  <div class="row" style="margin-top:8px"><button class="grow" id="btnGoogle">Đăng nhập bằng Google</button></div>
   <p class="err" id="authErr"></p>
 </section>
 
@@ -82,7 +81,7 @@ pre{margin:0;background:var(--code);color:var(--code-ink);border-radius:8px;padd
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signInWithPopup, GoogleAuthProvider, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import { getFirestore, collection, addDoc, deleteDoc, doc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -101,9 +100,9 @@ const $ = id => document.getElementById(id);
 let unsub = null, items = [], user = null;
 
 const msgs = {
-  "auth/invalid-credential":"Email hoặc mật khẩu không đúng.",
-  "auth/invalid-email":"Email không hợp lệ.",
-  "auth/email-already-in-use":"Email này đã có tài khoản. Hãy đăng nhập.",
+  "auth/invalid-credential":"Tên đăng nhập hoặc mật khẩu không đúng.",
+  "auth/invalid-email":"Tên đăng nhập không hợp lệ.",
+  "auth/email-already-in-use":"Tên đăng nhập này đã có người dùng. Hãy chọn tên khác hoặc đăng nhập.",
   "auth/weak-password":"Mật khẩu cần ít nhất 6 ký tự.",
   "auth/popup-closed-by-user":"Bạn đã đóng cửa sổ đăng nhập.",
   "auth/operation-not-allowed":"Chưa bật phương thức này trong Firebase Console (Authentication → Sign-in method).",
@@ -121,10 +120,15 @@ async function copy(text){
 }
 
 // Đăng nhập
+const DOMAIN = "@khocode.app"; // email ảo, người dùng không cần biết
+function toEmail(){
+  const name = $("email").value.trim().toLowerCase();
+  if (!/^[a-z0-9._-]{3,30}$/.test(name)) throw {message:"Tên đăng nhập gồm 3–30 ký tự: chữ không dấu, số, dấu . _ -"};
+  return name + DOMAIN;
+}
 const run = async (fn) => { $("authErr").textContent=""; try{await fn()}catch(e){$("authErr").textContent=errText(e)} };
-$("btnLogin").onclick = () => run(()=>signInWithEmailAndPassword(auth,$("email").value.trim(),$("pass").value));
-$("btnSignup").onclick = () => run(()=>createUserWithEmailAndPassword(auth,$("email").value.trim(),$("pass").value));
-$("btnGoogle").onclick = () => run(()=>signInWithPopup(auth,new GoogleAuthProvider()));
+$("btnLogin").onclick = () => run(()=>signInWithEmailAndPassword(auth,toEmail(),$("pass").value));
+$("btnSignup").onclick = () => run(()=>createUserWithEmailAndPassword(auth,toEmail(),$("pass").value));
 $("btnOut").onclick = () => signOut(auth);
 
 onAuthStateChanged(auth, u => {
@@ -133,7 +137,7 @@ onAuthStateChanged(auth, u => {
   $("app").classList.toggle("hidden", !u);
   if (unsub) { unsub(); unsub = null; }
   if (!u) { items = []; return; }
-  $("who").textContent = u.email || u.displayName || "";
+  $("who").textContent = (u.email || "").replace(DOMAIN,"");
   const q = query(collection(db,"users",u.uid,"snippets"), orderBy("createdAt","desc"));
   unsub = onSnapshot(q, snap => { items = snap.docs.map(d=>({id:d.id,...d.data()})); render(); },
     e => { $("saveErr").textContent = errText(e); });
