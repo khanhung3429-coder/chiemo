@@ -27,8 +27,13 @@ header{display:flex;justify-content:space-between;align-items:center;gap:10px;fl
 .err{color:var(--danger);min-height:1.3em;font-size:.9rem;margin:4px 0 0}
 #auth{max-width:380px;margin:8vh auto 0}
 .hidden{display:none!important}
-.item-head{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
-.item-head strong{overflow-wrap:anywhere}
+.item{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin-bottom:8px}
+.item-head{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
+.item-head .name{flex:1 1 140px;min-width:0;text-align:left;border:0;background:none;padding:6px 0;font-weight:600;overflow-wrap:anywhere}
+.item-head .name::before{content:"▸ ";color:var(--mute)}
+.item-head .name[aria-expanded="true"]::before{content:"▾ "}
+.item-head button.sm{padding:4px 10px;font-size:.88rem}
+.item pre{margin-top:8px}
 pre{margin:0;background:var(--code);color:var(--code-ink);border-radius:8px;padding:12px;overflow:auto;max-height:320px;font:.85rem/1.5 Consolas,"Courier New",monospace}
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--accent);color:var(--accent-ink);padding:8px 16px;border-radius:8px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s}
 .toast.show{opacity:1}
@@ -82,7 +87,7 @@ pre{margin:0;background:var(--code);color:var(--code-ink);border-radius:8px;padd
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-import { getFirestore, collection, addDoc, deleteDoc, doc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCnf211JJoVx-t91gYpj1w742vSoDRm_r0",
@@ -171,6 +176,7 @@ $("file").onchange = async e => {
 };
 
 // Hiển thị
+const open = new Set();
 function render(){
   const k = $("search").value.trim().toLowerCase();
   const list = $("list"); list.innerHTML = "";
@@ -180,26 +186,39 @@ function render(){
     p.textContent = items.length ? "Không có mục nào khớp." : "Chưa có gì. Dán code hoặc tải file lên ở trên để lưu.";
     list.appendChild(p); return;
   }
+  const mk = (txt, cls, fn) => { const b=document.createElement("button"); b.className=cls; b.textContent=txt; b.onclick=fn; return b; };
   for (const i of shown) {
-    const box = document.createElement("article"); box.className="panel";
+    const box = document.createElement("article"); box.className="item";
     const head = document.createElement("div"); head.className="item-head";
-    const name = document.createElement("strong"); name.textContent = i.title;
+    const name = mk(i.title, "name", () => {
+      const on = !open.has(i.id);
+      on ? open.add(i.id) : open.delete(i.id);
+      pre.classList.toggle("hidden", !on);
+      name.setAttribute("aria-expanded", on);
+    });
     const btns = document.createElement("div"); btns.className="row";
-    const bCopy = document.createElement("button"); bCopy.className="primary"; bCopy.textContent="Sao chép";
-    bCopy.onclick = () => copy(i.content);
-    const bDl = document.createElement("button"); bDl.textContent="Tải về";
-    bDl.onclick = () => {
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(new Blob([i.content],{type:"text/plain"}));
-      a.download = i.title; a.click(); URL.revokeObjectURL(a.href);
-    };
-    const bDel = document.createElement("button"); bDel.className="danger"; bDel.textContent="Xóa";
-    bDel.onclick = async () => {
-      if (confirm(`Xóa "${i.title}"?`)) { try{await deleteDoc(doc(db,"users",user.uid,"snippets",i.id))}catch(e){toast(errText(e))} }
-    };
-    btns.append(bCopy,bDl,bDel); head.append(name,btns);
+    btns.append(
+      mk("Sao chép", "sm primary", () => copy(i.content)),
+      mk("Đổi tên", "sm", async () => {
+        const t = prompt("Tên mới:", i.title);
+        if (t === null || !t.trim() || t.trim() === i.title) return;
+        try { await updateDoc(doc(db,"users",user.uid,"snippets",i.id), {title:t.trim()}); toast("Đã đổi tên"); }
+        catch(e){ toast(errText(e)); }
+      }),
+      mk("Tải về", "sm", () => {
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob([i.content],{type:"text/plain"}));
+        a.download = i.title; a.click(); URL.revokeObjectURL(a.href);
+      }),
+      mk("Xóa", "sm danger", async () => {
+        if (confirm(`Xóa "${i.title}"?`)) { try{await deleteDoc(doc(db,"users",user.uid,"snippets",i.id))}catch(e){toast(errText(e))} }
+      })
+    );
     const pre = document.createElement("pre"); pre.textContent = i.content;
-    box.append(head,pre); list.appendChild(box);
+    const isOpen = open.has(i.id);
+    pre.classList.toggle("hidden", !isOpen);
+    name.setAttribute("aria-expanded", isOpen);
+    head.append(name,btns); box.append(head,pre); list.appendChild(box);
   }
 }
 $("search").oninput = render;
